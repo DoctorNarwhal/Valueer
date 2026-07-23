@@ -10,6 +10,7 @@ const GVIZ_URL =
 const HEADERS = {
   cat0: "kategorija0",
   cat1: "kategorija1",
+  cat2: "kategorija2",
   artikel: "artikel",
   opomba: "opomba",
   akcija: "akcija",
@@ -30,9 +31,10 @@ let rows = [];          // parsed article rows
 let navStack = [];       // history of previous {screen,cat0,cat1} snapshots (for back)
 let navForward = [];     // snapshots to redo (for forward)
 let state = {
-  screen: "home",       // home | cat1 | articles | search
+  screen: "home",       // home | cat1 | cat2 | articles | search
   cat0: null,
   cat1: null,
+  cat2: null,
   query: "",
   sortField: "unit",    // 'unit' (Cena/količino) | 'total' (Cena)
   sortDir: "asc",        // 'asc' | 'desc'
@@ -182,6 +184,7 @@ function parseTable(table) {
     out.push({
       cat0: cat0 || "Brez kategorije",
       cat1: cellStr(row, "cat1") || "Brez podkategorije",
+      cat2: cellStr(row, "cat2") || "Splošno",
       artikel: artikel || "(neznan izdelek)",
       opomba: cellStr(row, "opomba"),
       akcija: cellBool(row, "akcija"),
@@ -209,12 +212,13 @@ function showError(msg) {
 
 // ---- NAVIGATION ----
 function navSnapshot() {
-  return { screen: state.screen, cat0: state.cat0, cat1: state.cat1 };
+  return { screen: state.screen, cat0: state.cat0, cat1: state.cat1, cat2: state.cat2 };
 }
 function navApply(s) {
   state.screen = s.screen;
   state.cat0 = s.cat0;
   state.cat1 = s.cat1;
+  state.cat2 = s.cat2;
 }
 // Call before moving to a "deeper" screen (selecting a category, etc.)
 function navPush() {
@@ -226,6 +230,7 @@ function goHome() {
   state.screen = "home";
   state.cat0 = null;
   state.cat1 = null;
+  state.cat2 = null;
   state.query = "";
   el.searchInput.value = "";
   navStack = [];
@@ -251,6 +256,7 @@ function render() {
   updateChrome();
   if (state.screen === "home") renderHome();
   else if (state.screen === "cat1") renderCat1();
+  else if (state.screen === "cat2") renderCat2();
   else if (state.screen === "articles") renderArticles();
   else if (state.screen === "search") renderSearch();
 }
@@ -267,9 +273,12 @@ function updateChrome() {
   } else if (state.screen === "cat1") {
     el.pageTitle.textContent = state.cat0;
     el.crumb.textContent = "";
-  } else if (state.screen === "articles") {
+  } else if (state.screen === "cat2") {
     el.pageTitle.textContent = state.cat1;
     el.crumb.textContent = state.cat0 + " › " + state.cat1;
+  } else if (state.screen === "articles") {
+    el.pageTitle.textContent = state.cat2;
+    el.crumb.textContent = state.cat0 + " › " + state.cat1 + " › " + state.cat2;
   } else if (state.screen === "search") {
     el.pageTitle.textContent = "Iskanje";
     el.crumb.textContent = "";
@@ -333,6 +342,31 @@ function renderCat1() {
     btn.addEventListener("click", () => {
       navPush();
       state.cat1 = btn.dataset.cat1;
+      state.screen = "cat2";
+      render();
+    });
+  });
+}
+
+function renderCat2() {
+  const groups = {};
+  rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1).forEach((r) => {
+    groups[r.cat2] = (groups[r.cat2] || 0) + 1;
+  });
+  const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "sl"));
+
+  el.content.innerHTML = `<div class="grid">` +
+    names.map((n) => `
+      <button class="tile" data-cat2="${escapeAttr(n)}">
+        <span class="tile-name">${escapeHtml(n)}</span>
+        <span class="tile-count">${groups[n]} izdelkov</span>
+      </button>`).join("") +
+    `</div>`;
+
+  el.content.querySelectorAll(".tile").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navPush();
+      state.cat2 = btn.dataset.cat2;
       state.screen = "articles";
       // reset store filter selection for the new list, keep sort/promo prefs
       state.stores = new Set();
@@ -342,7 +376,7 @@ function renderCat1() {
 }
 
 function renderArticles() {
-  let list = rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1);
+  let list = rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1 && r.cat2 === state.cat2);
   renderPromoChips();
   renderStoreChips(list);
   list = applyFiltersAndSort(list);
@@ -478,6 +512,7 @@ function articleRowHtml(r) {
   const isCoupon = state.sparCoupon && r.trgovina === "Spar";
   const discCena = isCoupon ? priceValue(r, "cena") : null;
   const discCenaEnota = isCoupon ? priceValue(r, "cenaEnota") : null;
+  const unitLabel = r.enota || "enoto";
 
   return `
     <div class="article">
@@ -494,8 +529,8 @@ function articleRowHtml(r) {
       <div class="article-price">
         <div class="price-main ${isCoupon ? "price-main--struck" : ""}">${escapeHtml(r.cenaDisplay || "")}</div>
         ${discCena !== null ? `<div class="price-main price-discounted">${formatEUR(discCena)}</div>` : ""}
-        ${r.cenaEnotaDisplay ? `<div class="price-unit ${isCoupon ? "price-unit--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/enoto</div>` : ""}
-        ${discCenaEnota !== null ? `<div class="price-unit price-discounted-unit">${formatEUR(discCenaEnota)}/enoto</div>` : ""}
+        ${r.cenaEnotaDisplay ? `<div class="price-unit ${isCoupon ? "price-unit--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/${escapeHtml(unitLabel)}</div>` : ""}
+        ${discCenaEnota !== null ? `<div class="price-unit price-discounted-unit">${formatEUR(discCenaEnota)}/${escapeHtml(unitLabel)}</div>` : ""}
       </div>
     </div>`;
 }
