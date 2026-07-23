@@ -56,7 +56,6 @@ const el = {
   sortFieldBtn: document.getElementById("sortFieldBtn"),
   sortDirBtn: document.getElementById("sortDirBtn"),
   promoChips: document.getElementById("promoChips"),
-  couponBtn: document.getElementById("couponBtn"),
   storeChips: document.getElementById("storeChips"),
   priceBarWrap: document.getElementById("priceBarWrap")
 };
@@ -74,10 +73,6 @@ el.sortFieldBtn.addEventListener("click", () => {
 });
 el.sortDirBtn.addEventListener("click", () => {
   state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-  render();
-});
-el.couponBtn.addEventListener("click", () => {
-  state.sparCoupon = !state.sparCoupon;
   render();
 });
 
@@ -289,7 +284,6 @@ function updateChrome() {
     el.sortFieldBtn.classList.add("active");
     el.sortDirBtn.textContent = state.sortDir === "asc" ? "↑ najcenejše" : "↓ najdražje";
     el.sortDirBtn.classList.add("active");
-    el.couponBtn.classList.toggle("active", state.sparCoupon);
   }
 }
 
@@ -387,17 +381,24 @@ function renderArticles() {
 function renderPromoChips() {
   const options = [
     { value: "all", label: "Vse" },
-    { value: "promo", label: "🏷️ Samo akcija" },
-    { value: "nonpromo", label: "Brez akcije" }
+    { value: "promo", label: "🏷️" },
+    { value: "nonpromo", label: "🚫" }
   ];
-  el.promoChips.innerHTML = options.map((o) => `
-    <button class="chip chip--toggle ${state.promoFilter === o.value ? "active" : ""}" data-promo="${o.value}">${o.label}</button>
-  `).join("");
-  el.promoChips.querySelectorAll(".chip--toggle").forEach((btn) => {
+  el.promoChips.innerHTML =
+    options.map((o) => `
+      <button class="chip chip--toggle ${state.promoFilter === o.value ? "active" : ""}" data-promo="${o.value}">${o.label}</button>
+    `).join("") +
+    `<button id="couponBtn" class="chip chip--toggle ${state.sparCoupon ? "active" : ""}">Spar -10%</button>`;
+
+  el.promoChips.querySelectorAll(".chip--toggle[data-promo]").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.promoFilter = btn.dataset.promo;
       render();
     });
+  });
+  el.promoChips.querySelector("#couponBtn").addEventListener("click", () => {
+    state.sparCoupon = !state.sparCoupon;
+    render();
   });
 }
 
