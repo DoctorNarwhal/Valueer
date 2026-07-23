@@ -199,13 +199,22 @@ html,body{
   font-size:11px; font-weight:700;
   padding:1px 6px; border-radius:5px;
 }
+.couponTag{
+  background:var(--green-soft); color:var(--green);
+  font-size:11px; font-weight:700;
+  padding:1px 6px; border-radius:5px;
+}
 .article-price{
   font-family:var(--mono);
   text-align:right;
   flex-shrink:0;
 }
 .price-main{ font-size:16px; font-weight:700; }
+.price-main--struck{ font-size:12px; font-weight:500; opacity:0.5; text-decoration:line-through; }
+.price-discounted{ font-size:16px; font-weight:800; color:var(--green); }
 .price-unit{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.price-unit--struck{ opacity:0.5; text-decoration:line-through; }
+.price-discounted-unit{ font-size:11px; font-weight:700; color:var(--green); margin-top:1px; }
 
 .empty{ text-align:center; color:var(--ink-soft); padding:50px 20px; font-size:14px; }
 .errorBox{
