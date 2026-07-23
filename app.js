@@ -27,6 +27,8 @@ function norm(s) {
 
 // ---- STATE ----
 let rows = [];          // parsed article rows
+let navStack = [];       // history of previous {screen,cat0,cat1} snapshots (for back)
+let navForward = [];     // snapshots to redo (for forward)
 let state = {
   screen: "home",       // home | cat1 | articles | search
   cat0: null,
@@ -35,6 +37,7 @@ let state = {
   sortField: "unit",    // 'unit' (Cena/količino) | 'total' (Cena)
   sortDir: "asc",        // 'asc' | 'desc'
   promoFilter: "all",    // 'all' | 'promo' | 'nonpromo'
+  sparCoupon: false,     // Spar -10% coupon toggle
   stores: new Set()      // selected stores to show (empty set = show all)
 };
 
@@ -51,6 +54,7 @@ const el = {
   sortFieldBtn: document.getElementById("sortFieldBtn"),
   sortDirBtn: document.getElementById("sortDirBtn"),
   promoChips: document.getElementById("promoChips"),
+  couponBtn: document.getElementById("couponBtn"),
   storeChips: document.getElementById("storeChips"),
   priceBarWrap: document.getElementById("priceBarWrap")
 };
@@ -70,6 +74,35 @@ el.sortDirBtn.addEventListener("click", () => {
   state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
   render();
 });
+el.couponBtn.addEventListener("click", () => {
+  state.sparCoupon = !state.sparCoupon;
+  render();
+});
+
+// ---- SWIPE NAVIGATION (iOS-style: swipe left = back, swipe right = forward) ----
+(function setupSwipeNav() {
+  let startX = 0, startY = 0, tracking = false;
+  const THRESHOLD = 60;     // minimum horizontal distance to count as a swipe
+  const RATIO = 1.5;        // must be mostly horizontal, not a vertical scroll
+
+  document.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (Math.abs(dx) < THRESHOLD || Math.abs(dx) < Math.abs(dy) * RATIO) return;
+    if (dx < 0) goBack();
+    else goForwardNav();
+  }, { passive: true });
+})();
 
 
 // ---- LOAD & PARSE ----
@@ -175,22 +208,42 @@ function showError(msg) {
 }
 
 // ---- NAVIGATION ----
+function navSnapshot() {
+  return { screen: state.screen, cat0: state.cat0, cat1: state.cat1 };
+}
+function navApply(s) {
+  state.screen = s.screen;
+  state.cat0 = s.cat0;
+  state.cat1 = s.cat1;
+}
+// Call before moving to a "deeper" screen (selecting a category, etc.)
+function navPush() {
+  navStack.push(navSnapshot());
+  navForward = [];
+}
+
 function goHome() {
   state.screen = "home";
   state.cat0 = null;
   state.cat1 = null;
   state.query = "";
   el.searchInput.value = "";
+  navStack = [];
+  navForward = [];
   render();
 }
 function goBack() {
-  if (state.screen === "articles") {
-    state.screen = "cat1";
-    state.cat1 = null;
-    render();
-  } else if (state.screen === "cat1" || state.screen === "search") {
-    goHome();
-  }
+  if (state.screen === "search") { goHome(); return; }
+  if (navStack.length === 0) return; // already at the top
+  navForward.push(navSnapshot());
+  navApply(navStack.pop());
+  render();
+}
+function goForwardNav() {
+  if (navForward.length === 0) return; // nothing to redo
+  navStack.push(navSnapshot());
+  navApply(navForward.pop());
+  render();
 }
 
 // ---- RENDER ----
@@ -227,6 +280,7 @@ function updateChrome() {
     el.sortFieldBtn.classList.add("active");
     el.sortDirBtn.textContent = state.sortDir === "asc" ? "↑ najcenejše" : "↓ najdražje";
     el.sortDirBtn.classList.add("active");
+    el.couponBtn.classList.toggle("active", state.sparCoupon);
   }
 }
 
@@ -252,6 +306,7 @@ function renderHome() {
 
   el.content.querySelectorAll(".tile").forEach((btn) => {
     btn.addEventListener("click", () => {
+      navPush();
       state.cat0 = btn.dataset.cat0;
       state.screen = "cat1";
       render();
@@ -276,6 +331,7 @@ function renderCat1() {
 
   el.content.querySelectorAll(".tile").forEach((btn) => {
     btn.addEventListener("click", () => {
+      navPush();
       state.cat1 = btn.dataset.cat1;
       state.screen = "articles";
       // reset store filter selection for the new list, keep sort/promo prefs
@@ -319,7 +375,7 @@ function renderSearch() {
   el.filterBar.hidden = true;
   el.content.innerHTML = `<div class="searchHint">${list.length} zadetkov</div>`;
   const listEl = document.createElement("div");
-  list = list.slice().sort((a, b) => (a.cenaEnota ?? Infinity) - (b.cenaEnota ?? Infinity));
+  list = list.slice().sort((a, b) => (priceValue(a, "cenaEnota") ?? Infinity) - (priceValue(b, "cenaEnota") ?? Infinity));
   listEl.className = "articleList";
   listEl.innerHTML = list.map(articleRowHtml).join("");
   el.content.appendChild(listEl);
@@ -340,6 +396,15 @@ function renderStoreChips(list) {
   });
 }
 
+// Effective price after the Spar coupon (if active), for a given row/field.
+// The coupon stacks on top of any existing promo discount already in Cena.
+function priceValue(r, field) {
+  const raw = r[field];
+  if (raw === null || raw === undefined || isNaN(raw)) return null;
+  if (state.sparCoupon && r.trgovina === "Spar") return raw * 0.9;
+  return raw;
+}
+
 function applyFiltersAndSort(list) {
   if (state.promoFilter === "promo") list = list.filter((r) => r.akcija);
   else if (state.promoFilter === "nonpromo") list = list.filter((r) => !r.akcija);
@@ -348,8 +413,8 @@ function applyFiltersAndSort(list) {
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
   const dir = state.sortDir === "asc" ? 1 : -1;
   list = list.slice().sort((a, b) => {
-    const av = a[field] ?? Infinity;
-    const bv = b[field] ?? Infinity;
+    const av = priceValue(a, field) ?? Infinity;
+    const bv = priceValue(b, field) ?? Infinity;
     return (av - bv) * dir;
   });
   return list;
@@ -375,7 +440,7 @@ function renderPriceBarBottom(list) {
 }
 
 function priceStats(list, field) {
-  const vals = list.map((r) => r[field]).filter((v) => v !== null && v !== undefined && !isNaN(v));
+  const vals = list.map((r) => priceValue(r, field)).filter((v) => v !== null && v !== undefined && !isNaN(v));
   if (!vals.length) return null;
   const min = Math.min(...vals);
   const max = Math.max(...vals);
@@ -410,6 +475,10 @@ function renderPriceBarHtml(stats, fieldLabel) {
 
 function articleRowHtml(r) {
   const qty = r.kolicina ? `${r.kolicina} ${r.enota}`.trim() : "";
+  const isCoupon = state.sparCoupon && r.trgovina === "Spar";
+  const discCena = isCoupon ? priceValue(r, "cena") : null;
+  const discCenaEnota = isCoupon ? priceValue(r, "cenaEnota") : null;
+
   return `
     <div class="article">
       <div class="article-main">
@@ -419,11 +488,14 @@ function articleRowHtml(r) {
           ${qty ? `<span>· ${escapeHtml(qty)}</span>` : ""}
           ${r.opomba ? `<span class="article-note">· ${escapeHtml(r.opomba)}</span>` : ""}
           ${r.akcija ? `<span class="promoTag">AKCIJA</span>` : ""}
+          ${isCoupon ? `<span class="couponTag">KUPON -10%</span>` : ""}
         </div>
       </div>
       <div class="article-price">
-        <div class="price-main">${escapeHtml(r.cenaDisplay || "")}</div>
-        ${r.cenaEnotaDisplay ? `<div class="price-unit">${escapeHtml(r.cenaEnotaDisplay)}/enoto</div>` : ""}
+        <div class="price-main ${isCoupon ? "price-main--struck" : ""}">${escapeHtml(r.cenaDisplay || "")}</div>
+        ${discCena !== null ? `<div class="price-main price-discounted">${formatEUR(discCena)}</div>` : ""}
+        ${r.cenaEnotaDisplay ? `<div class="price-unit ${isCoupon ? "price-unit--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/enoto</div>` : ""}
+        ${discCenaEnota !== null ? `<div class="price-unit price-discounted-unit">${formatEUR(discCenaEnota)}/enoto</div>` : ""}
       </div>
     </div>`;
 }
