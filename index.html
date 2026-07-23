@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Cene</title>
+
+<!-- iOS Home Screen app behavior -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cene">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#faf8f3">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <button id="backBtn" class="iconbtn" aria-label="Nazaj" hidden>‹</button>
+    <h1 id="pageTitle">Cene</h1>
+    <button id="refreshBtn" class="iconbtn" aria-label="Osveži">⟳</button>
+  </header>
+
+  <!-- Breadcrumb -->
+  <div id="crumb"></div>
+
+  <!-- Search (home screen only) -->
+  <div id="searchWrap">
+    <input id="searchInput" type="search" placeholder="Išči izdelek…" autocomplete="off" autocorrect="off" spellcheck="false">
+  </div>
+
+  <!-- Filter bar (article list screen only) -->
+  <div id="filterBar" hidden>
+    <div class="filterRow">
+      <button id="sortFieldBtn" class="chip chip--toggle"></button>
+      <button id="sortDirBtn" class="chip chip--toggle"></button>
+      <button id="promoBtn" class="chip chip--toggle">🏷️ Samo akcija</button>
+    </div>
+    <div id="storeChips" class="filterRow"></div>
+  </div>
+
+  <!-- Main content -->
+  <main id="content">
+    <div id="loading" class="state">
+      <div class="spinner"></div>
+      <p>Nalagam cene …</p>
+    </div>
+  </main>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
