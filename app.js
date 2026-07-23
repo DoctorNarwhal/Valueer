@@ -34,7 +34,7 @@ let state = {
   query: "",
   sortField: "unit",    // 'unit' (Cena/količino) | 'total' (Cena)
   sortDir: "asc",        // 'asc' | 'desc'
-  promoOnly: false,
+  promoFilter: "all",    // 'all' | 'promo' | 'nonpromo'
   stores: new Set()      // selected stores to show (empty set = show all)
 };
 
@@ -50,7 +50,7 @@ const el = {
   filterBar: document.getElementById("filterBar"),
   sortFieldBtn: document.getElementById("sortFieldBtn"),
   sortDirBtn: document.getElementById("sortDirBtn"),
-  promoBtn: document.getElementById("promoBtn"),
+  promoChips: document.getElementById("promoChips"),
   storeChips: document.getElementById("storeChips")
 };
 
@@ -69,10 +69,7 @@ el.sortDirBtn.addEventListener("click", () => {
   state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
   render();
 });
-el.promoBtn.addEventListener("click", () => {
-  state.promoOnly = !state.promoOnly;
-  render();
-});
+
 
 // ---- LOAD & PARSE ----
 function loadData(forceReload) {
@@ -228,7 +225,6 @@ function updateChrome() {
     el.sortFieldBtn.classList.add("active");
     el.sortDirBtn.textContent = state.sortDir === "asc" ? "↑ najcenejše" : "↓ najdražje";
     el.sortDirBtn.classList.add("active");
-    el.promoBtn.classList.toggle("active", state.promoOnly);
   }
 }
 
@@ -289,9 +285,27 @@ function renderCat1() {
 
 function renderArticles() {
   let list = rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1);
+  renderPromoChips();
   renderStoreChips(list);
   list = applyFiltersAndSort(list);
   renderArticleList(list);
+}
+
+function renderPromoChips() {
+  const options = [
+    { value: "all", label: "Vse" },
+    { value: "promo", label: "🏷️ Samo akcija" },
+    { value: "nonpromo", label: "Brez akcije" }
+  ];
+  el.promoChips.innerHTML = options.map((o) => `
+    <button class="chip chip--toggle ${state.promoFilter === o.value ? "active" : ""}" data-promo="${o.value}">${o.label}</button>
+  `).join("");
+  el.promoChips.querySelectorAll(".chip--toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.promoFilter = btn.dataset.promo;
+      render();
+    });
+  });
 }
 
 function renderSearch() {
@@ -324,7 +338,8 @@ function renderStoreChips(list) {
 }
 
 function applyFiltersAndSort(list) {
-  if (state.promoOnly) list = list.filter((r) => r.akcija);
+  if (state.promoFilter === "promo") list = list.filter((r) => r.akcija);
+  else if (state.promoFilter === "nonpromo") list = list.filter((r) => !r.akcija);
   if (state.stores.size > 0) list = list.filter((r) => state.stores.has(r.trgovina));
 
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
@@ -342,7 +357,47 @@ function renderArticleList(list) {
     el.content.innerHTML = `<div class="empty">Ni izdelkov s temi filtri.</div>`;
     return;
   }
-  el.content.innerHTML = `<div class="articleList">${list.map(articleRowHtml).join("")}</div>`;
+  const field = state.sortField === "unit" ? "cenaEnota" : "cena";
+  const fieldLabel = state.sortField === "unit" ? "€ / enoto" : "€ skupaj";
+  const stats = priceStats(list, field);
+
+  el.content.innerHTML =
+    `<div class="articleList">${list.map(articleRowHtml).join("")}</div>` +
+    renderPriceBarHtml(stats, fieldLabel);
+}
+
+function priceStats(list, field) {
+  const vals = list.map((r) => r[field]).filter((v) => v !== null && v !== undefined && !isNaN(v));
+  if (!vals.length) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  return { min, max, avg, mid: (min + max) / 2, count: vals.length };
+}
+
+function formatEUR(v) {
+  return "€" + v.toFixed(2).replace(".", ",");
+}
+
+function renderPriceBarHtml(stats, fieldLabel) {
+  if (!stats) return "";
+  const range = stats.max - stats.min;
+  const avgPct = range > 0 ? ((stats.avg - stats.min) / range) * 100 : 50;
+
+  return `
+    <div class="priceBar">
+      <div class="priceBar-title">Razpon cen · ${escapeHtml(fieldLabel)} <span class="priceBar-count">(${stats.count} ${stats.count === 1 ? "izdelek" : "izdelkov"})</span></div>
+      <div class="priceBar-track">
+        <div class="priceBar-midTick"></div>
+        <div class="priceBar-avgLabel" style="left:${avgPct}%">povp. ${formatEUR(stats.avg)}</div>
+        <div class="priceBar-avgDot" style="left:${avgPct}%"></div>
+      </div>
+      <div class="priceBar-endLabels">
+        <span>${formatEUR(stats.min)}<br><small>najnižja</small></span>
+        <span class="priceBar-midLabel">${formatEUR(stats.mid)}<br><small>sredina</small></span>
+        <span>${formatEUR(stats.max)}<br><small>najvišja</small></span>
+      </div>
+    </div>`;
 }
 
 function articleRowHtml(r) {
