@@ -176,6 +176,10 @@ function parseTable(table) {
     const cat0 = cellStr(row, "cat0");
     if (!artikel && !cat0) return; // skip blank rows
 
+    const enotaVal = cellStr(row, "enota");
+    const rawCenaEnota = cellNum(row, "cenaEnota");
+    const upi = unitPriceInfo(rawCenaEnota, enotaVal);
+
     out.push({
       cat0: cat0 || "Brez kategorije",
       cat1: cellStr(row, "cat1") || "Brez podkategorije",
@@ -187,12 +191,29 @@ function parseTable(table) {
       cenaDisplay: cellStr(row, "cena"),
       cena: cellNum(row, "cena"),
       kolicina: cellNum(row, "kolicina"),
-      enota: cellStr(row, "enota"),
-      cenaEnotaDisplay: cellStr(row, "cenaEnota"),
-      cenaEnota: cellNum(row, "cenaEnota")
+      enota: enotaVal,
+      cenaEnotaDisplay: upi.display,
+      cenaEnota: upi.value,
+      unitLabel: upi.unitLabel
     });
   });
   return out;
+}
+
+// The sheet's "Cena/količino" column is always computed as (Cena/Količina)*1000.
+// That's correct as-is when the unit is grams or millilitres (it becomes a
+// per-kg / per-litre price) — it just needs the right label. For count-based
+// units (kos, or anything else), a "per 1000" price isn't meaningful, so we
+// divide back out to get the real per-piece price.
+function unitPriceInfo(rawCenaEnota, enota) {
+  const e = (enota || "").trim().toLowerCase();
+  if (rawCenaEnota === null || rawCenaEnota === undefined || isNaN(rawCenaEnota)) {
+    return { value: null, display: "", unitLabel: enota || "enoto" };
+  }
+  if (e === "g") return { value: rawCenaEnota, display: formatEUR(rawCenaEnota), unitLabel: "kg" };
+  if (e === "ml" || e === "mL".toLowerCase()) return { value: rawCenaEnota, display: formatEUR(rawCenaEnota), unitLabel: "L" };
+  const corrected = rawCenaEnota / 1000;
+  return { value: corrected, display: formatEUR(corrected), unitLabel: enota || "enoto" };
 }
 
 function showError(msg) {
@@ -513,7 +534,7 @@ function articleRowHtml(r) {
   const isCoupon = state.sparCoupon && r.trgovina === "Spar";
   const discCena = isCoupon ? priceValue(r, "cena") : null;
   const discCenaEnota = isCoupon ? priceValue(r, "cenaEnota") : null;
-  const unitLabel = r.enota || "enoto";
+  const unitLabel = r.unitLabel || r.enota || "enoto";
 
   return `
     <div class="article">
