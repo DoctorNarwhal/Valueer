@@ -51,7 +51,8 @@ const el = {
   sortFieldBtn: document.getElementById("sortFieldBtn"),
   sortDirBtn: document.getElementById("sortDirBtn"),
   promoChips: document.getElementById("promoChips"),
-  storeChips: document.getElementById("storeChips")
+  storeChips: document.getElementById("storeChips"),
+  priceBarWrap: document.getElementById("priceBarWrap")
 };
 
 el.backBtn.addEventListener("click", goBack);
@@ -205,6 +206,7 @@ function updateChrome() {
   el.backBtn.hidden = state.screen === "home";
   el.searchWrap.hidden = state.screen !== "home";
   el.filterBar.hidden = state.screen !== "articles";
+  el.priceBarWrap.hidden = state.screen !== "articles";
 
   if (state.screen === "home") {
     el.pageTitle.textContent = "Cene";
@@ -289,6 +291,7 @@ function renderArticles() {
   renderStoreChips(list);
   list = applyFiltersAndSort(list);
   renderArticleList(list);
+  renderPriceBarBottom(list);
 }
 
 function renderPromoChips() {
@@ -357,13 +360,18 @@ function renderArticleList(list) {
     el.content.innerHTML = `<div class="empty">Ni izdelkov s temi filtri.</div>`;
     return;
   }
+  el.content.innerHTML = `<div class="articleList">${list.map(articleRowHtml).join("")}</div>`;
+}
+
+function renderPriceBarBottom(list) {
+  if (!list.length) {
+    el.priceBarWrap.innerHTML = "";
+    return;
+  }
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
   const fieldLabel = state.sortField === "unit" ? "€ / enoto" : "€ skupaj";
   const stats = priceStats(list, field);
-
-  el.content.innerHTML =
-    `<div class="articleList">${list.map(articleRowHtml).join("")}</div>` +
-    renderPriceBarHtml(stats, fieldLabel);
+  el.priceBarWrap.innerHTML = renderPriceBarHtml(stats, fieldLabel);
 }
 
 function priceStats(list, field) {
