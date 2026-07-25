@@ -178,7 +178,15 @@ function parseTable(table) {
     if (!artikel && !cat0) return; // skip blank rows
 
     const enotaVal = cellStr(row, "enota");
-    const rawCenaEnota = cellNum(row, "cenaEnota");
+    const cenaVal = cellNum(row, "cena");
+    const kolicinaVal = cellNum(row, "kolicina");
+    let rawCenaEnota = cellNum(row, "cenaEnota");
+    if ((rawCenaEnota === null || rawCenaEnota === undefined) && cenaVal !== null && kolicinaVal) {
+      // Sheet's own formula column is blank (e.g. not yet dragged down onto a
+      // freshly imported row) -- reproduce the same (Cena/Količina)*1000 math
+      // client-side so the app still works without waiting on the sheet.
+      rawCenaEnota = (cenaVal / kolicinaVal) * 1000;
+    }
     const upi = unitPriceInfo(rawCenaEnota, enotaVal);
 
     out.push({
@@ -190,8 +198,8 @@ function parseTable(table) {
       akcija: cellBool(row, "akcija"),
       trgovina: cellStr(row, "trgovina") || "?",
       cenaDisplay: cellStr(row, "cena"),
-      cena: cellNum(row, "cena"),
-      kolicina: cellNum(row, "kolicina"),
+      cena: cenaVal,
+      kolicina: kolicinaVal,
       enota: enotaVal,
       cenaEnotaDisplay: upi.display,
       cenaEnota: upi.value,
