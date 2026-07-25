@@ -19,6 +19,7 @@ const HEADERS = {
   kolicina: "količina",
   enota: "enota",
   cenaEnota: "cena/količino",
+  datumVnosa: "datumvnosa",
   trgovinaArtikel: "trgovina-artikel"
 };
 
@@ -194,7 +195,8 @@ function parseTable(table) {
       enota: enotaVal,
       cenaEnotaDisplay: upi.display,
       cenaEnota: upi.value,
-      unitLabel: upi.unitLabel
+      unitLabel: upi.unitLabel,
+      datumVnosa: cellStr(row, "datumVnosa")
     });
   });
   return out;
@@ -461,10 +463,38 @@ function priceValue(r, field) {
   return raw;
 }
 
+// Parses "DD.MM.YYYY" into a comparable number (YYYYMMDD). Unparseable/missing
+// dates sort as oldest (0), so a dated duplicate always wins over an undated one.
+function parseDatumVnosa(d) {
+  if (!d) return 0;
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(d.trim());
+  if (!m) return 0;
+  const [, dd, mm, yyyy] = m;
+  return parseInt(yyyy, 10) * 10000 + parseInt(mm, 10) * 100 + parseInt(dd, 10);
+}
+
+// Collapses rows that represent the same real-world listing (same article,
+// store, price, quantity and promo status) down to just the most recently
+// entered one -- so re-importing an unchanged price from a new catalog
+// doesn't create visible duplicates in the app.
+function dedupeRows(list) {
+  const byKey = new Map();
+  for (const r of list) {
+    const key = [r.artikel, r.trgovina, r.cena, r.kolicina, r.enota, r.akcija].join("~~");
+    const existing = byKey.get(key);
+    if (!existing || parseDatumVnosa(r.datumVnosa) >= parseDatumVnosa(existing.datumVnosa)) {
+      byKey.set(key, r);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 function applyFiltersAndSort(list) {
   if (state.promoFilter === "promo") list = list.filter((r) => r.akcija);
   else if (state.promoFilter === "nonpromo") list = list.filter((r) => !r.akcija);
   if (state.stores.size > 0) list = list.filter((r) => state.stores.has(r.trgovina));
+
+  list = dedupeRows(list);
 
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
   const dir = state.sortDir === "asc" ? 1 : -1;
@@ -556,6 +586,7 @@ function articleRowHtml(r) {
           ${r.akcija ? `<span class="promoTag">AKCIJA</span>` : ""}
           ${isCoupon ? `<span class="couponTag">KUPON -10%</span>` : ""}
         </div>
+        ${r.datumVnosa ? `<div class="article-date">vneseno ${escapeHtml(r.datumVnosa)}</div>` : ""}
       </div>
       <div class="article-price">
         ${r.cenaEnotaDisplay ? `<div class="price-main ${isCoupon ? "price-main--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/${escapeHtml(unitLabel)}</div>` : ""}
