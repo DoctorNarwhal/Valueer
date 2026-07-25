@@ -1,11 +1,13 @@
+
+App · JS
 // ---- CONFIGURATION ----
 // Your Google Sheet ID and tab name (from the URL: /d/<SHEET_ID>/... and the tab label at the bottom)
 const SHEET_ID = "1u5ULzznDU94EP-A_KYJsCPFKDgzsU4LHBKQUKndziRo";
 const SHEET_NAME = "Source";
-
+ 
 const GVIZ_URL =
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&headers=1&_=${Date.now()}`;
-
+ 
 // Expected headers (normalized: trimmed, lowercased, spaces removed)
 const HEADERS = {
   cat0: "kategorija0",
@@ -21,11 +23,11 @@ const HEADERS = {
   cenaEnota: "cena/količino",
   trgovinaArtikel: "trgovina-artikel"
 };
-
+ 
 function norm(s) {
   return (s || "").toString().trim().toLowerCase().replace(/\s+/g, "");
 }
-
+ 
 // ---- STATE ----
 let rows = [];          // parsed article rows
 let navStack = [];       // history of previous {screen,cat0,cat1} snapshots (for back)
@@ -39,10 +41,10 @@ let state = {
   sortField: "unit",    // 'unit' (Cena/količino) | 'total' (Cena)
   sortDir: "asc",        // 'asc' | 'desc'
   promoFilter: "all",    // 'all' | 'promo' | 'nonpromo'
-  sparCoupon: false,     // Spar -10% coupon toggle
+  sparCoupon: true,      // Spar -10% coupon toggle (on by default)
   stores: new Set()      // selected stores to show (empty set = show all)
 };
-
+ 
 // ---- DOM ----
 const el = {
   content: document.getElementById("content"),
@@ -59,7 +61,7 @@ const el = {
   storeChips: document.getElementById("storeChips"),
   priceBarWrap: document.getElementById("priceBarWrap")
 };
-
+ 
 el.backBtn.addEventListener("click", goBack);
 el.refreshBtn.addEventListener("click", () => loadData(true));
 el.searchInput.addEventListener("input", (e) => {
@@ -75,20 +77,20 @@ el.sortDirBtn.addEventListener("click", () => {
   state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
   render();
 });
-
+ 
 // ---- SWIPE NAVIGATION (iOS-style: swipe left = back, swipe right = forward) ----
 (function setupSwipeNav() {
   let startX = 0, startY = 0, tracking = false;
   const THRESHOLD = 60;     // minimum horizontal distance to count as a swipe
   const RATIO = 1.5;        // must be mostly horizontal, not a vertical scroll
-
+ 
   document.addEventListener("touchstart", (e) => {
     if (e.touches.length !== 1) { tracking = false; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     tracking = true;
   }, { passive: true });
-
+ 
   document.addEventListener("touchend", (e) => {
     if (!tracking) return;
     tracking = false;
@@ -100,8 +102,8 @@ el.sortDirBtn.addEventListener("click", () => {
     else goForwardNav();
   }, { passive: true });
 })();
-
-
+ 
+ 
 // ---- LOAD & PARSE ----
 function loadData(forceReload) {
   el.content.innerHTML = `
@@ -109,9 +111,9 @@ function loadData(forceReload) {
       <div class="spinner"></div>
       <p>Nalagam cene …</p>
     </div>`;
-
+ 
   const url = forceReload ? GVIZ_URL.replace(/_=\d+/, "_=" + Date.now()) : GVIZ_URL;
-
+ 
   fetch(url)
     .then((r) => {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -132,7 +134,7 @@ function loadData(forceReload) {
       showError(err.message);
     });
 }
-
+ 
 function parseTable(table) {
   const colIndex = {};
   table.cols.forEach((c, i) => {
@@ -141,7 +143,7 @@ function parseTable(table) {
       if (label === HEADERS[key]) colIndex[key] = i;
     }
   });
-
+ 
   function cellVal(row, key) {
     const i = colIndex[key];
     if (i === undefined) return null;
@@ -168,18 +170,18 @@ function parseTable(table) {
     const s = norm(cell.f || cell.v);
     return ["da", "yes", "true", "1", "y"].includes(s);
   }
-
+ 
   const out = [];
   (table.rows || []).forEach((row) => {
     if (!row.c) return;
     const artikel = cellStr(row, "artikel");
     const cat0 = cellStr(row, "cat0");
     if (!artikel && !cat0) return; // skip blank rows
-
+ 
     const enotaVal = cellStr(row, "enota");
     const rawCenaEnota = cellNum(row, "cenaEnota");
     const upi = unitPriceInfo(rawCenaEnota, enotaVal);
-
+ 
     out.push({
       cat0: cat0 || "Brez kategorije",
       cat1: cellStr(row, "cat1") || "Brez podkategorije",
@@ -199,7 +201,7 @@ function parseTable(table) {
   });
   return out;
 }
-
+ 
 // The sheet's "Cena/količino" column is always computed as (Cena/Količina)*1000.
 // That's correct as-is when the unit is grams or millilitres (it becomes a
 // per-kg / per-litre price) — it just needs the right label. For count-based
@@ -215,7 +217,7 @@ function unitPriceInfo(rawCenaEnota, enota) {
   const corrected = rawCenaEnota / 1000;
   return { value: corrected, display: formatEUR(corrected), unitLabel: enota || "enoto" };
 }
-
+ 
 function showError(msg) {
   el.content.innerHTML = `
     <div class="errorBox">
@@ -225,7 +227,7 @@ function showError(msg) {
       <div><button onclick="loadData(true)">Poskusi znova</button></div>
     </div>`;
 }
-
+ 
 // ---- NAVIGATION ----
 function navSnapshot() {
   return { screen: state.screen, cat0: state.cat0, cat1: state.cat1, cat2: state.cat2 };
@@ -241,7 +243,7 @@ function navPush() {
   navStack.push(navSnapshot());
   navForward = [];
 }
-
+ 
 function goHome() {
   state.screen = "home";
   state.cat0 = null;
@@ -266,7 +268,7 @@ function goForwardNav() {
   navApply(navForward.pop());
   render();
 }
-
+ 
 // ---- RENDER ----
 function render() {
   updateChrome();
@@ -276,13 +278,13 @@ function render() {
   else if (state.screen === "articles") renderArticles();
   else if (state.screen === "search") renderSearch();
 }
-
+ 
 function updateChrome() {
   el.backBtn.hidden = state.screen === "home";
   el.searchWrap.hidden = state.screen !== "home";
   el.filterBar.hidden = state.screen !== "articles";
   el.priceBarWrap.hidden = state.screen !== "articles";
-
+ 
   if (state.screen === "home") {
     el.pageTitle.textContent = "Cene";
     el.crumb.textContent = "";
@@ -299,7 +301,7 @@ function updateChrome() {
     el.pageTitle.textContent = "Iskanje";
     el.crumb.textContent = "";
   }
-
+ 
   if (state.screen === "articles") {
     el.sortFieldBtn.textContent = state.sortField === "unit" ? "€ / enoto" : "€ skupaj";
     el.sortFieldBtn.classList.add("active");
@@ -307,19 +309,19 @@ function updateChrome() {
     el.sortDirBtn.classList.add("active");
   }
 }
-
+ 
 function renderHome() {
   const groups = {};
   rows.forEach((r) => {
     groups[r.cat0] = (groups[r.cat0] || 0) + 1;
   });
   const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "sl"));
-
+ 
   if (names.length === 0) {
     el.content.innerHTML = `<div class="empty">Ni podatkov v razpredelnici.</div>`;
     return;
   }
-
+ 
   el.content.innerHTML = `<div class="grid">` +
     names.map((n) => `
       <button class="tile" data-cat0="${escapeAttr(n)}">
@@ -327,7 +329,7 @@ function renderHome() {
         <span class="tile-count">${groups[n]} izdelkov</span>
       </button>`).join("") +
     `</div>`;
-
+ 
   el.content.querySelectorAll(".tile").forEach((btn) => {
     btn.addEventListener("click", () => {
       navPush();
@@ -337,14 +339,14 @@ function renderHome() {
     });
   });
 }
-
+ 
 function renderCat1() {
   const groups = {};
   rows.filter((r) => r.cat0 === state.cat0).forEach((r) => {
     groups[r.cat1] = (groups[r.cat1] || 0) + 1;
   });
   const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "sl"));
-
+ 
   el.content.innerHTML = `<div class="grid">` +
     names.map((n) => `
       <button class="tile" data-cat1="${escapeAttr(n)}">
@@ -352,7 +354,7 @@ function renderCat1() {
         <span class="tile-count">${groups[n]} izdelkov</span>
       </button>`).join("") +
     `</div>`;
-
+ 
   el.content.querySelectorAll(".tile").forEach((btn) => {
     btn.addEventListener("click", () => {
       navPush();
@@ -362,14 +364,14 @@ function renderCat1() {
     });
   });
 }
-
+ 
 function renderCat2() {
   const groups = {};
   rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1).forEach((r) => {
     groups[r.cat2] = (groups[r.cat2] || 0) + 1;
   });
   const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "sl"));
-
+ 
   el.content.innerHTML = `<div class="grid">` +
     names.map((n) => `
       <button class="tile" data-cat2="${escapeAttr(n)}">
@@ -377,7 +379,7 @@ function renderCat2() {
         <span class="tile-count">${groups[n]} izdelkov</span>
       </button>`).join("") +
     `</div>`;
-
+ 
   el.content.querySelectorAll(".tile").forEach((btn) => {
     btn.addEventListener("click", () => {
       navPush();
@@ -389,7 +391,7 @@ function renderCat2() {
     });
   });
 }
-
+ 
 function renderArticles() {
   let list = rows.filter((r) => r.cat0 === state.cat0 && r.cat1 === state.cat1 && r.cat2 === state.cat2);
   renderPromoChips();
@@ -398,7 +400,7 @@ function renderArticles() {
   renderArticleList(list);
   renderPriceBarBottom(list);
 }
-
+ 
 function renderPromoChips() {
   const options = [
     { value: "all", label: "Vse" },
@@ -410,7 +412,7 @@ function renderPromoChips() {
       <button class="chip chip--toggle ${state.promoFilter === o.value ? "active" : ""}" data-promo="${o.value}">${o.label}</button>
     `).join("") +
     `<button id="couponBtn" class="chip chip--toggle ${state.sparCoupon ? "active" : ""}">Spar -10%</button>`;
-
+ 
   el.promoChips.querySelectorAll(".chip--toggle[data-promo]").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.promoFilter = btn.dataset.promo;
@@ -422,7 +424,7 @@ function renderPromoChips() {
     render();
   });
 }
-
+ 
 function renderSearch() {
   const q = norm(state.query);
   let list = rows.filter((r) =>
@@ -436,7 +438,7 @@ function renderSearch() {
   listEl.innerHTML = list.map(articleRowHtml).join("");
   el.content.appendChild(listEl);
 }
-
+ 
 function renderStoreChips(list) {
   const stores = Array.from(new Set(list.map((r) => r.trgovina))).sort((a, b) => a.localeCompare(b, "sl"));
   el.storeChips.innerHTML = stores.map((s) => `
@@ -451,7 +453,7 @@ function renderStoreChips(list) {
     });
   });
 }
-
+ 
 // Effective price after the Spar coupon (if active), for a given row/field.
 // The coupon stacks on top of any existing promo discount already in Cena.
 function priceValue(r, field) {
@@ -460,12 +462,12 @@ function priceValue(r, field) {
   if (state.sparCoupon && r.trgovina === "Spar") return raw * 0.9;
   return raw;
 }
-
+ 
 function applyFiltersAndSort(list) {
   if (state.promoFilter === "promo") list = list.filter((r) => r.akcija);
   else if (state.promoFilter === "nonpromo") list = list.filter((r) => !r.akcija);
   if (state.stores.size > 0) list = list.filter((r) => state.stores.has(r.trgovina));
-
+ 
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
   const dir = state.sortDir === "asc" ? 1 : -1;
   list = list.slice().sort((a, b) => {
@@ -475,7 +477,7 @@ function applyFiltersAndSort(list) {
   });
   return list;
 }
-
+ 
 function renderArticleList(list) {
   if (list.length === 0) {
     el.content.innerHTML = `<div class="empty">Ni izdelkov s temi filtri.</div>`;
@@ -483,7 +485,7 @@ function renderArticleList(list) {
   }
   el.content.innerHTML = `<div class="articleList">${list.map(articleRowHtml).join("")}</div>`;
 }
-
+ 
 function renderPriceBarBottom(list) {
   if (!list.length) {
     el.priceBarWrap.innerHTML = "";
@@ -491,10 +493,11 @@ function renderPriceBarBottom(list) {
   }
   const field = state.sortField === "unit" ? "cenaEnota" : "cena";
   const fieldLabel = state.sortField === "unit" ? "€ / enoto" : "€ skupaj";
+  const values = list.map((r) => priceValue(r, field)).filter((v) => v !== null && v !== undefined && !isNaN(v));
   const stats = priceStats(list, field);
-  el.priceBarWrap.innerHTML = renderPriceBarHtml(stats, fieldLabel);
+  el.priceBarWrap.innerHTML = renderPriceBarHtml(stats, fieldLabel, values);
 }
-
+ 
 function priceStats(list, field) {
   const vals = list.map((r) => priceValue(r, field)).filter((v) => v !== null && v !== undefined && !isNaN(v));
   if (!vals.length) return null;
@@ -503,20 +506,28 @@ function priceStats(list, field) {
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   return { min, max, avg, mid: (min + max) / 2, count: vals.length };
 }
-
+ 
 function formatEUR(v) {
   return "€" + v.toFixed(2).replace(".", ",");
 }
-
-function renderPriceBarHtml(stats, fieldLabel) {
+ 
+function renderPriceBarHtml(stats, fieldLabel, values) {
   if (!stats) return "";
   const range = stats.max - stats.min;
   const avgPct = range > 0 ? ((stats.avg - stats.min) / range) * 100 : 50;
-
+ 
+  const pointsHtml = (values || [])
+    .map((v) => {
+      const pct = range > 0 ? ((v - stats.min) / range) * 100 : 50;
+      return `<div class="priceBar-point" style="left:${pct}%"></div>`;
+    })
+    .join("");
+ 
   return `
     <div class="priceBar">
       <div class="priceBar-title">Razpon cen · ${escapeHtml(fieldLabel)} <span class="priceBar-count">(${stats.count} ${stats.count === 1 ? "izdelek" : "izdelkov"})</span></div>
       <div class="priceBar-track">
+        ${pointsHtml}
         <div class="priceBar-midTick"></div>
         <div class="priceBar-avgLabel" style="left:${avgPct}%">povp. ${formatEUR(stats.avg)}</div>
         <div class="priceBar-avgDot" style="left:${avgPct}%"></div>
@@ -528,14 +539,14 @@ function renderPriceBarHtml(stats, fieldLabel) {
       </div>
     </div>`;
 }
-
+ 
 function articleRowHtml(r) {
   const qty = r.kolicina ? `${r.kolicina} ${r.enota}`.trim() : "";
   const isCoupon = state.sparCoupon && r.trgovina === "Spar";
   const discCena = isCoupon ? priceValue(r, "cena") : null;
   const discCenaEnota = isCoupon ? priceValue(r, "cenaEnota") : null;
   const unitLabel = r.unitLabel || r.enota || "enoto";
-
+ 
   return `
     <div class="article">
       <div class="article-main">
@@ -549,19 +560,20 @@ function articleRowHtml(r) {
         </div>
       </div>
       <div class="article-price">
-        <div class="price-main ${isCoupon ? "price-main--struck" : ""}">${escapeHtml(r.cenaDisplay || "")}</div>
-        ${discCena !== null ? `<div class="price-main price-discounted">${formatEUR(discCena)}</div>` : ""}
-        ${r.cenaEnotaDisplay ? `<div class="price-unit ${isCoupon ? "price-unit--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/${escapeHtml(unitLabel)}</div>` : ""}
-        ${discCenaEnota !== null ? `<div class="price-unit price-discounted-unit">${formatEUR(discCenaEnota)}/${escapeHtml(unitLabel)}</div>` : ""}
+        ${r.cenaEnotaDisplay ? `<div class="price-main ${isCoupon ? "price-main--struck" : ""}">${escapeHtml(r.cenaEnotaDisplay)}/${escapeHtml(unitLabel)}</div>` : ""}
+        ${discCenaEnota !== null ? `<div class="price-main price-discounted">${formatEUR(discCenaEnota)}/${escapeHtml(unitLabel)}</div>` : ""}
+        <div class="price-unit ${isCoupon ? "price-unit--struck" : ""}">${escapeHtml(r.cenaDisplay || "")}</div>
+        ${discCena !== null ? `<div class="price-unit price-discounted-unit">${formatEUR(discCena)}</div>` : ""}
       </div>
     </div>`;
 }
-
+ 
 // ---- utils ----
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function escapeAttr(s) { return escapeHtml(s); }
-
+ 
 // ---- INIT ----
 loadData(false);
+ 
